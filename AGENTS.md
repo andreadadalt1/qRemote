@@ -343,6 +343,9 @@ the primary's key is reused (no second secret). The add/edit forms hide
 username/password/API key and host/port/HTTPS in this mode and show one masked
 `QuiProxyUrlField`; the edit screen repopulates it with `buildQuiProxyUrl`
 (ending at `/proxy/` for an imported server whose key was stripped).
+`tests/services/qui-proxy-e2e.test.ts` drives real axios against a local
+qui-shaped server — the other qui tests mock axios, so it is the only one that
+proves the key reaches the wire intact.
 
 ---
 
@@ -354,8 +357,8 @@ Complete map. Trust it.
 
 | Path | Notes |
 |---|---|
-| `app/(tabs)/(torrents)/` | Torrents tab as a nested stack: `index` list, `torrent/[hash]`, `torrent/files`, `torrent/manage-trackers`. Group is omitted from URLs → `/`, `/torrent/[hash]`. |
-| `app/(tabs)/search.tsx` | Search tab: job polling UI, plugin/category/indexer filter chips, client-side sort (keys: seeders/leechers/size/name/date/quality — Quality, #268, ranks by the resolution in the release name via `utils/video-quality.ts` and keeps unknown-quality results last in both directions; the sort dropdown also hosts the persisted "Hide zero seeders" toggle, `searchHideZeroSeeders` pref, and the persisted "Group duplicates" toggle, `searchGroupDuplicates` pref, default **on** — #267), a funnel-button filter panel (`components/SearchFilterPanel.tsx`: "Search in" names-only/everywhere — persisted `searchInMode` pref — plus session-only text, seeders and size filters, WebUI parity, #266), collapsing header. Result pipeline (`filteredResults` → `listItems`): dedupe → tracker chips → panel filters → hide zero seeders → group duplicates → sort by each group's primary (with grouping off every result is a group of one, so the list is exactly as before). Grouping (#267) collapses results that look like one torrent — same magnet `btih`, or same normalized name + exact size, confirmed on qBit 5.2+ by resolving duplicate-looking `.torrent` links through `torrents/fetchMetadata` — into one `SearchResultGroupRow`; the row's `+` adds the whole group (one merged magnet carrying every source's trackers, or the primary `.torrent` plus an `addTrackers` top-up once the torrent exists), a source's own `+` adds only that source. "names only" matches the last *submitted* pattern, not the live query box. Optional auto-tag-by-tracker on add (`autoCategorizeByTracker` pref — tags Search downloads only; the key name is historical). |
+| `app/(tabs)/(torrents)/` | Torrents tab as a nested stack: `index` list, `torrent/[hash]`, `torrent/files`, `torrent/manage-trackers`. Group is omitted from URLs → `/`, `/torrent/[hash]`. The `index` search field has a clear ✕ and a recent-searches dropdown (#282; prefs `torrentSearchHistory`, `torrentSearchPinned`, `torrentSearchHistoryLimit`; Settings → Appearance → Recent searches). |
+| `app/(tabs)/search.tsx` | Search tab: job polling UI, plugin/category/indexer filter chips, client-side sort (keys: seeders/leechers/size/name/date/quality — Quality, #268, ranks by the resolution in the release name via `utils/video-quality.ts` and keeps unknown-quality results last in both directions; the sort dropdown also hosts the persisted "Hide zero seeders" toggle, `searchHideZeroSeeders` pref, and the persisted "Group duplicates" toggle, `searchGroupDuplicates` pref, default **on** — #267), a funnel-button filter panel (`components/SearchFilterPanel.tsx`: "Search in" names-only/everywhere — persisted `searchInMode` pref — plus session-only text, seeders and size filters, WebUI parity, #266), collapsing header. Result pipeline (`filteredResults` → `listItems`): dedupe → tracker chips → panel filters → hide zero seeders → group duplicates → sort by each group's primary (with grouping off every result is a group of one, so the list is exactly as before). Grouping (#267) collapses results that look like one torrent — same magnet `btih`, or same normalized name + exact size, confirmed on qBit 5.2+ by resolving duplicate-looking `.torrent` links through `torrents/fetchMetadata` — into one `SearchResultGroupRow`; the row's `+` adds the whole group (one merged magnet carrying every source's trackers, or the primary `.torrent` plus an `addTrackers` top-up once the torrent exists), a source's own `+` adds only that source. "names only" matches the last *submitted* pattern, not the live query box. Optional auto-tag-by-tracker on add (`autoCategorizeByTracker` pref — tags Search downloads only; the key name is historical). Tapping a plugin chip's icon pins/unpins it (`FilterChip` `onIconPress`, `searchPinnedPlugins` pref); chips show an outline `star` when unpinned and a filled `star` when pinned; pinned chips sort first, and the row scrolls back to the start after pinning (#283). `+` hands a plugin-resolved result's plugin to both add dialogs as the `sourcePlugin` route param, and cart items carry `downloader` (#284). |
 | `app/(tabs)/transfer.tsx` | Transfer stats, global speed and seeding limits. |
 | `app/(tabs)/logs.tsx` | qBittorrent's own server-side application + peer log viewer (`logs/main`, `logs/peers` via `services/api/logs.ts`) — needs a live connection, shows a "not connected" placeholder otherwise. `href: null` — reached from Settings → Advanced ("Server Logs" row), not a visible tab. Not the app's own connectivity/diagnostic log — see `components/LogViewer.tsx` for that. |
 | `app/(tabs)/rss/` | RSS Feeds tab (`index` tree + `feed` detail). `href` is null until connected **and** the server's `rss_processing_enabled` is on. Rules and settings screens do **not** go here — they live under Settings. |
@@ -456,7 +459,8 @@ All PascalCase function components taking a `…Props` interface.
   compact badge+name in the torrents screen header; lists saved servers, marks
   the connected one, taps another to call `connectToServer` directly; owns its
   own transient switching-id/error state rather than threading it through the
-  screen, mirroring `QuickConnectPanel`'s row treatment).
+  screen, mirroring `QuickConnectPanel`'s row treatment),
+  `SearchHistoryDropdown` (#282 — recent/pinned searches popover under the Torrents tab search field; rows are pin/clock icon + query + pin toggle + remove, footer "Clear recent" keeps pinned; with no entries it explains how searches get saved, because the clock button shows whenever history is on (limit > 0), not only once something is saved. Presentational only; `app/(tabs)/(torrents)/index.tsx` owns open state, positioning (measured `onLayout`, mutually exclusive with the sort menu) and persistence).
 - **Torrent / search UI** — `TorrentCard` (`React.memo` with a **custom
   comparator — keep it in sync when you add a rendered field**, or the card
   silently stops updating; category/tag stickers use `categoryColors`/`tagColors`
@@ -489,7 +493,8 @@ All PascalCase function components taking a `…Props` interface.
   connectivity log, `services/connectivity-log.ts` — copy-to-clipboard via
   `formatConnectivityLog()`; opened from Settings → Advanced's "View
   Connectivity Logs" row; works with no live server connection, unlike
-  `app/(tabs)/logs.tsx`), `DebugRow`, `SuperDebugPanel`.
+  `app/(tabs)/logs.tsx`), `DebugRow`, `SuperDebugPanel`,
+  `ThemePresetsSection` (Settings → Theme "Presets" row, #286 — horizontally scrolling swatch cards previewing each preset for the *current* light/dark mode, built from `constants/themePresets.ts`; `default` previews the live `darkColors`/`lightColors`. Presentational: highlights from a `ThemePresetSelection` prop and calls `onSelect`; the screen owns applying and the confirm over custom colors).
 
 ### API wrappers (`services/api/`)
 
@@ -521,18 +526,22 @@ Thin objects over `apiClient`.
   back the server-list export/import; import preserves this device's stored
   secrets when an id already exists.
 - **`storage.ts`** — AsyncStorage preferences (typed shape and defaults in
-  `types/preferences.ts`).
+  `types/preferences.ts`). Prefer `updatePreferences(patch)` for new writers: it
+  queues writes and re-reads inside the queue, so overlapping saves can't drop
+  each other's keys the way a bare `getPreferences` → `savePreferences` can.
 - **`incoming-file.ts`** — copies an incoming `.torrent` into the app cache
   before the iOS security-scoped access can lapse.
 - **`query-client.ts`** — the shared TanStack `QueryClient`.
-- **`color-theme-manager.ts`** — save/load/apply user color themes.
+- **`color-theme-manager.ts`** — save/load/apply user color themes. `applyThemePreset` (#286) writes both modes and `themePresetId` in one `savePreferences` call (which overwrites, so deleting a key removes it).
 - **`connectivity-log.ts`** — in-memory ring log (`clogDebug/Info/Warn/Error(tag, msg)`),
   displayed by `components/LogViewer.tsx`.
 - **`search-tracker-topup.ts`** — #267: after a Search group of `.torrent` links is
   added, waits (up to ~3 min, abortable) for the torrent to appear by ID and calls
   `addTrackers` with the other sources' trackers. `prepareTrackerTopUp` first checks
   the client doesn't already have the torrent; everything is silent best-effort.
-  Also exports `abortableDelay`, shared with `search.tsx`'s auto-tag poll.
+  Also exports `abortableDelay` and `tagNewlyDownloadedTorrent` (the best-effort
+  tag-by-name poll after a `search/downloadTorrent` add, used by Search instant
+  add and 5.0–5.1 cart checkout).
 
 ### Native modules (`modules/`)
 
@@ -600,8 +609,9 @@ legitimately saved `retryAttempts: 0`) ·
 `authMode.ts` (derives `password`/`apiKey`/`none`/`quiProxy`) · `basicAuth.ts` ·
 `quiProxy.ts` (qui Client Proxy URLs, #272 — `parseQuiProxyUrl`/`buildQuiProxyUrl`
 for the pasted `…/proxy/<key>` URL, `withQuiProxyPath` for the request path,
-`redactQuiProxyKey` for logs/errors/debug text, and the `QUI_KEY_*` messages
-`ServerManager` matches) ·
+`redactQuiProxyKey` for logs/errors/debug text, `detectQuiProxyUrlInHost` (#278 —
+a qui URL pasted into the plain Host field flips the add/edit form to qui Proxy
+mode), and the `QUI_KEY_*` messages `ServerManager` matches) ·
 `customHeaders.ts` (per-server custom HTTP headers — sanitize/validate, and the
 reserved-name set the app manages itself: Authorization, Cookie, Referer,
 Origin, Content-Type, Host — #228) ·
@@ -635,6 +645,10 @@ never reads `x264`/`h264` or a bare `1080`/year as a resolution, and deliberatel
 skips ambiguous "2K". `getVideoQualityLabel(rank)` for display, and
 `compareByQuality(a, b, dir)` — the Search "Quality" sort comparator: unknown
 last in *both* directions, ties by seeders desc with `-1` as 0 — #268) ·
+`search-history.ts` (#282 — pure Torrents-tab recent-search lists: `recordQuery` (trim, ignore <2 chars, case-insensitive dedupe keeping latest casing, front, trim to limit, limit 0 = off, never duplicates a pinned entry), `togglePin` (recent ⇄ pinned, max `MAX_PINNED_SEARCHES` = 10, pinned entries don't count toward the limit), `removeQuery`, `clearUnpinned`, `applyHistoryLimit`, `getHistoryEntries` (pinned first); `SEARCH_HISTORY_LIMIT_OPTIONS` backs the Appearance picker) ·
+`search-plugins.ts` (#283 — Search plugin pinning: `orderPluginsWithPins(sortedPlugins, pinned)` moves pinned plugins to the front of the already-sorted list, keeping the incoming enabled-then-name order within each group and ignoring pinned names that aren't installed; `prunePinnedPlugins(pinned, installed)` drops uninstalled and duplicate names; `togglePinnedPlugin(pinned, name, installed)` is the chip-icon tap — unpins a pinned plugin, otherwise pins an installed one — and the result is what the `searchPinnedPlugins` pref saves) ·
+`search-download.ts` (#284 — how a Search result's URL is added through the plugin that produced it. `isAggregatorResult(result)` is true for Jackett/Prowlarr results, detected per result by `engineName` matching `/jackett|prowlarr/i` or an `apikey=` / `jackett_apikey=` query param in the `fileUrl`; it deliberately does not infer this from "all results share one site". `getResultDownloader(result)` returns the result's `engineName` for non-magnet, non-aggregator results with an engine name, and is the single rule shared by `search.tsx`'s instant add, the `sourcePlugin` handoff to both add dialogs, cart items' `downloader`, and `useSearchHashResolver`. `planPluginUrlAdd(downloader, features)` returns `addWithDownloader` (`torrents/add` + `downloader`, WebAPI ≥ 2.13.1, all options kept), `searchDownloadTorrent` (5.0–5.1, default options only) or `plainAdd` (4.x). `getPrefilledDownloader(urls, {url, plugin})` lets the dialogs apply a Search-supplied plugin only while the submitted URLs are still exactly the pre-filled one) ·
+`themePresets.ts` (#286 — `getThemePresetSelection(customColors, themePresetId)` → `default` | `preset` | `custom` (+ `basedOn`), derived by deep-comparing stored overrides with the preset and never from the id alone, so existing hand-picked colors are always `custom`; `findThemePreset`; `presetApplyNeedsConfirm` — true only for `custom`) ·
 `login-response.ts` (qBittorrent login body/cookie interpretation) ·
 `haptics.ts` (global toggle + wrappers) · `tags.ts` (CSV tag parsing) ·
 `add-torrent-dialogue.ts` (compact vs full variant, plus `getSearchAddOpensDialogue`
@@ -650,7 +664,7 @@ qBittorrent's DHT/PeX/LSD pseudo-tracker entries out of `torrents/trackers`;
 same entries — #234, #236) · `color.ts` (`withAlpha` —
 applies an alpha channel to a hex/rgb/rgba color string; `colors.*` defaults
 mix formats, so appending a hex alpha suffix silently no-ops on an rgba()
-base).
+base; `contrastRatio(a, b)` — WCAG 2 contrast ratio for hex/rgb/rgba strings, alpha ignored, unparsable → 1).
 
 ### Types, constants, i18n
 
@@ -662,7 +676,8 @@ base).
   `spacing.ts`, `typography.ts`, `shadows.ts`, `buttons.ts`, `serverIcons.ts`
   (`SERVER_ICON_OPTIONS`, `DEFAULT_SERVER_ICON` — the curated Ionicons set for
   a server's badge, #224), `timing.ts` (`LONG_BACKGROUND_THRESHOLD_MS` — shared
-  by `TorrentContext` and `TransferContext` for their quick-app-switch gate).
+  by `TorrentContext` and `TransferContext` for their quick-app-switch gate),
+  `themePresets.ts` (`THEME_PRESETS`, `ThemePreset`, `DEFAULT_THEME_PRESET_ID` — #286: `default` plus oled/nord/dracula/solarized/highContrast/qbittorrentClassic, each defining EVERY `ColorTheme` key (incl. preset-only `primaryOpac`/`onAccent`) for both `dark` and `light`, 6-digit hex except `primaryOpac`. Applied through `colorThemeManager.applyThemePreset`. **Never rename a preset `id`** — it is persisted as `themePresetId`. Contrast is enforced by `tests/utils/themePresets.test.ts`).
   **Use these tokens; don't invent ad-hoc spacing.**
 - `i18n/index.ts` initializes react-i18next. Each locale is ONE file,
   `locales/{en,es,zh,fr,de,ru,pl}/translation.json`, holding every namespace:
@@ -935,3 +950,24 @@ Keep entries factual and current; if you find one that's no longer true
   `responseType`, so guard it). Tests that mock `request.response` directly
   pass while the real path silently sees nothing — mock the RN shape
   (`response: ''`, `responseText: '…'`) instead.
+- **A path typed into the plain Host field lands *before* the port.** The
+  non-qui server forms have no base-path field, and the client builds
+  `<host><:port><basePath>`, so Host `qui:7476/proxy/<key>` plus Port `7476`
+  requests `/proxy/<key>:7476/api/v2/…`. Against qui that reads as "Invalid
+  client API key" in qui's log and an auth failure in the app (#278) — it looks
+  exactly like a wrong key. qui URLs are now caught at input
+  (`detectQuiProxyUrlInHost`), and `services/api/client.ts` (plus the debug
+  panel's URL builder) now splits a path off Host so the port lands before it.
+- **A Search result whose link is an HTML page "adds" successfully and nothing
+  appears.** Some plugins (LimeTorrents, …) return a description page as
+  `fileUrl` and can only resolve it via their own `download_torrent()`. A plain
+  `torrents/add` makes qBittorrent download the HTML, fail to parse it and still
+  return 200, so the app reports success (#284). Such URLs must be fetched by
+  their plugin: `torrents/add` with `downloader=<engineName>` (WebAPI ≥ 2.13.1,
+  keeps all options), else `search/downloadTorrent` (5.0–5.1, default options
+  only); 4.x has neither. See `utils/search-download.ts`. Aggregator results
+  (Prowlarr/Jackett) are excluded per result — their links embed an apikey and
+  often redirect to a magnet, which core follows fine. Detect them with
+  `isAggregatorResult`, not the screen-level `isAggregatedSource` flag: that one
+  ("all results share one siteUrl") is only a label heuristic and also fires for
+  any single-plugin search.
