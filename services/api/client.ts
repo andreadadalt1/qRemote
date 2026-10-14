@@ -166,11 +166,15 @@ class ApiClient {
           config.headers.Cookie = this.cookies;
         }
 
-        // Add Referer header for qBittorrent 5.x compatibility
-        config.headers.Referer = config.baseURL + '/';
-
-        // Add Origin header for CORS/authentication
-        config.headers.Origin = `${protocol}://${host}${portPart}`;
+        // Referer/Origin for qBittorrent 5.x compatibility — but never through
+        // qui (#278). qui forwards them untouched while rewriting Host to the
+        // qBittorrent instance (e.g. `qbittorrent:8081`), so qBit's CSRF check
+        // sees a qui-host Origin vs a qBit-host Host and answers 401
+        // "Unauthorized". qui's other clients (Sonarr, Radarr…) send neither.
+        if (!isQuiProxy) {
+          config.headers.Referer = config.baseURL + '/';
+          config.headers.Origin = `${protocol}://${host}${portPart}`;
+        }
 
         // Custom headers (#228) — for tunnels/proxies with their own
         // header-based auth (e.g. Pangolin), independent of qBittorrent's
