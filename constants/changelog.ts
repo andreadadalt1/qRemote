@@ -28,13 +28,13 @@ export const CHANGELOG: ChangelogRelease[] = [
           'Added recent searches and a clear button to the torrent list search',
           'Added pinning search plugins by tapping their icon to keep favorites at the front',
           'Added theme presets to Settings → Theme',
-		  'Merhaba Türk arkadaşlarım (Turkish language support)',
+		      'Merhaba Türk arkadaşlarım (Turkish language support)',
         ],
       },
       {
         title: 'Bugs Fixed',
         items: [
-          'Fixed qui proxy servers failing to connect when the URL was pasted into the Host field',
+          'Fixed qui proxy (again), 3rd times the charm',
           'Fixed the connection diagnostic asking for a username and password in qui Proxy mode',
           'Fixed the loading spinner overlapping the torrent search box',
           'Fixed some search results (like LimeTorrents) showing as added but never appearing',
