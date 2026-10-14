@@ -962,6 +962,15 @@ Keep entries factual and current; if you find one that's no longer true
   exactly like a wrong key. qui URLs are now caught at input
   (`detectQuiProxyUrlInHost`), and `services/api/client.ts` (plus the debug
   panel's URL builder) now splits a path off Host so the port lands before it.
+- **A qui proxy that accepts the key can still 401 every request.** qui
+  forwards `Origin`/`Referer` to qBittorrent untouched but rewrites `Host` to
+  the instance (`qbittorrent:8081`), and qBit's CSRF check (reverse-proxy
+  support off by default, so it ignores `X-Forwarded-Host`) answers the
+  mismatch with a 12-byte `Unauthorized`. qui's trace log shows "Rewriting
+  proxy request" (key accepted) followed by `status=401` — unlike qui's own
+  16-byte `Invalid API key`. `services/api/client.ts` therefore sends neither
+  header in qui mode (#278); the debug panel never sent them, which is why its
+  diagnostic passed while the app's connect failed.
 - **A Search result whose link is an HTML page "adds" successfully and nothing
   appears.** Some plugins (LimeTorrents, …) return a description page as
   `fileUrl` and can only resolve it via their own `download_torrent()`. A plain

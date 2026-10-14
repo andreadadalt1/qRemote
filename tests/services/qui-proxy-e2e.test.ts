@@ -4,6 +4,11 @@
  * the single path segment after `/proxy/`, and any other value gets qui's 401
  * "Invalid API key". client-qui-proxy.test.ts mocks axios, so only this suite
  * proves the key reaches the server byte-for-byte.
+ *
+ * Past the key check it also behaves like the qBittorrent behind qui: qui
+ * forwards Origin/Referer untouched but rewrites Host to the instance, so
+ * qBit's CSRF check rejects any request carrying either with a 401
+ * "Unauthorized" (#278).
  */
 jest.mock('@/services/storage', () => ({
   storageService: {
@@ -49,6 +54,10 @@ beforeAll(async () => {
     }
     if (match[1] !== KEY) {
       res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Invalid API key\n');
+      return;
+    }
+    if (req.headers.origin || req.headers.referer) {
+      res.writeHead(401, { 'Content-Type': 'text/plain; charset=UTF-8' }).end('Unauthorized');
       return;
     }
     const replies: Record<string, string> = {

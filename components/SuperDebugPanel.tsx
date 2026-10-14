@@ -531,7 +531,9 @@ export function SuperDebugPanel({
     addEntry('INFO', `Opening login endpoint: ${url}`, 'info');
     addEntry(
       'INFO',
-      'If the server is working, the browser will show "Fails." (because no credentials were sent). That confirms the API endpoint is reachable.',
+      useQuiProxy
+        ? 'If the proxy URL is right, the browser will show "Method Not Allowed" (login only accepts POST). That confirms qui accepted the key. "Invalid API key" means the key is wrong.'
+        : 'If the server is working, the browser will show "Fails." (because no credentials were sent). That confirms the API endpoint is reachable.',
       'info',
     );
     try {
